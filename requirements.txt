@@ -1,0 +1,30 @@
+# Core RAG
+langchain
+langchain-community
+langchain-huggingface
+langchain-core
+
+# FAISS CPU-only (no CUDA, no GPU)
+faiss-cpu
+
+# Document loaders
+pypdf
+beautifulsoup4
+lxml
+unstructured
+
+# Embeddings — CPU-only torch (no CUDA)
+# Install torch CPU FIRST before sentence-transformers to avoid pulling CUDA builds
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+
+sentence-transformers
+
+# LLM options (uncomment what you use)
+ollama                    # local Llama3 / Mistral via Ollama
+# langchain-openai        # OpenAI GPT-4o
+# langchain-anthropic     # Claude
+
+# Utilities
+requests
