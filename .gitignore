@@ -1,1 +1,4 @@
-/Adithyan/NetFixAI_clean/.venv/
+
+/Adithyan/NeuralFix/backend/.venv/
+/Adithyan/NeuralFix/backend/.env
+/Adithyan/NeuralFix/mobile/node_modules/
