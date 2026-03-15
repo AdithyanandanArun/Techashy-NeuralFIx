@@ -15,28 +15,26 @@ def get_groq_client():
     return Groq(api_key=s.groq_api_key)
 
 
-PROMPT = """You are a network equipment technician. Look at the image and identify the networking device.
+PROMPT = """You are an extremely accurate AI vision model. You must look at the image and identify the object with 100% honesty. 
+
+CRITICAL RULE 1: If the object is a HOUSEHOLD ITEM (e.g. cup, shoe, remote), COMPUTER PERIPHERAL (e.g. mouse, keyboard, monitor), or ANYTHING ELSE that is NOT a traditional internet router, switch, or modem, you MUST NOT call it a router. You MUST call it "other" or "peripheral". 
+CRITICAL RULE 2: A computer mouse is NOT a router. A keyboard is NOT a router. Do not hallucinate LEDs where there are none.
 
 Respond with ONLY a raw JSON object (no markdown, no explanation, no code fences). Fill in real values based on what you see:
 
 {
-  "device_type": "router",
-  "brand_model": "TP-Link Archer AX73",
-  "led_states": [
-    {"label": "Power", "color": "green", "blinking": false},
-    {"label": "WAN", "color": "amber", "blinking": true}
-  ],
+  "device_type": "router", 
+  "brand_model": "Unknown",
+  "led_states": [],
   "unplugged_ports": [],
   "visible_damage": null,
-  "overall_assessment": "WAN LED is amber indicating no internet connection.",
-  "confidence": 0.82
+  "overall_assessment": "This appears to be a computer mouse, not a networking device.",
+  "confidence": 0.99
 }
 
-Rules:
-- device_type must be one of: router, switch, modem, access_point, unknown
-- color must be one of: green, red, amber, off, blinking
-- Use null for fields you cannot determine
-- confidence is a decimal between 0.0 and 1.0
+Rules for JSON:
+- device_type MUST strictly be one of: router, switch, modem, access_point, computer, mobile, peripheral, unknown, other. If it's a mouse/keyboard, use "peripheral". If it's a cup/shoe, use "other".
+- color MUST be one of: green, red, amber, off, blinking. (Leave empty list if no LEDs exist)
 - Return ONLY the JSON. Nothing before or after it."""
 
 
