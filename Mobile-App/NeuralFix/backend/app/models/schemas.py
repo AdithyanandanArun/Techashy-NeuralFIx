@@ -11,6 +11,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     session_id: str
     reply: str
+    expert_used: Optional[str] = None
     rag_used: bool = False
 
 

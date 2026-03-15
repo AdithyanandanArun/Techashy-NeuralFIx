@@ -15,12 +15,14 @@ def get_groq_client():
     return Groq(api_key=s.groq_api_key)
 
 
-PROMPT = """You are an extremely accurate AI vision model. You must look at the image and identify the object with 100% honesty. 
+PROMPT = """You are an accurate IT and networking vision model. Look at the image and identify the primary object. 
 
-CRITICAL RULE 1: If the object is a HOUSEHOLD ITEM (e.g. cup, shoe, remote), COMPUTER PERIPHERAL (e.g. mouse, keyboard, monitor), or ANYTHING ELSE that is NOT a traditional internet router, switch, or modem, you MUST NOT call it a router. You MUST call it "other" or "peripheral". 
-CRITICAL RULE 2: A computer mouse is NOT a router. A keyboard is NOT a router. Do not hallucinate LEDs where there are none.
+CRITICAL RULES:
+1. You must be completely unbiased. If the device is a router, switch, or modem, identify it as such.
+2. If the object is clearly a HOUSEHOLD ITEM (cup, shoe) or a COMPUTER PERIPHERAL (mouse, keyboard, monitor), you MUST NOT call it a router. Call it "other" or "peripheral".
+3. Look for antennas, network ports, or status LEDs to confirm if it is networking equipment.
 
-Respond with ONLY a raw JSON object (no markdown, no explanation, no code fences). Fill in real values based on what you see:
+Respond with ONLY a raw JSON object (no markdown). Fill in real values based on what you see:
 
 {
   "device_type": "router", 
@@ -28,13 +30,13 @@ Respond with ONLY a raw JSON object (no markdown, no explanation, no code fences
   "led_states": [],
   "unplugged_ports": [],
   "visible_damage": null,
-  "overall_assessment": "This appears to be a computer mouse, not a networking device.",
-  "confidence": 0.99
+  "overall_assessment": "This appears to be a standard home router.",
+  "confidence": 0.95
 }
 
 Rules for JSON:
-- device_type MUST strictly be one of: router, switch, modem, access_point, computer, mobile, peripheral, unknown, other. If it's a mouse/keyboard, use "peripheral". If it's a cup/shoe, use "other".
-- color MUST be one of: green, red, amber, off, blinking. (Leave empty list if no LEDs exist)
+- device_type MUST strictly be one of: router, switch, modem, access_point, computer, mobile, peripheral, unknown, other.
+- led_states MUST be a list of colors like: ["green", "blinking red", "off"]. (Leave empty list if no LEDs exist).
 - Return ONLY the JSON. Nothing before or after it."""
 
 
@@ -77,20 +79,33 @@ def analyse_image_bytes(image_bytes: bytes) -> dict:
     print(f"[LLaVA raw output]\n{raw}\n{'─'*60}")
     parsed_json = extract_json(raw)
 
-    # Ask Groq for a detailed fix guide
-    summary_prompt = f"""You are an expert network technician.
+    device_type = parsed_json.get("device_type", "unknown")
+    is_network_device = device_type in ["router", "switch", "modem", "access_point"]
+
+    if is_network_device:
+        summary_prompt = f"""You are an expert network technician.
 A physical inspection of the user's network equipment yielded the following findings:
 {json.dumps(parsed_json, indent=2)}
 
 Provide a highly detailed, step-by-step markdown response explaining exactly how the user can troubleshoot and fix the issues found.
 Structure it with headings, bullet points, and relevant warnings.
 """
+        system_role = "You are a helpful expert network support assistant."
+    else:
+        summary_prompt = f"""An AI vision model analyzed a photo uploaded by the user and reached this conclusion:
+{json.dumps(parsed_json, indent=2)}
+
+Politely inform the user that this appears to be a {device_type} (or non-networking item) rather than a router or modem.
+Keep it brief, friendly, and do NOT provide a 10-step troubleshooting guide for a random object.
+"""
+        system_role = "You are a friendly technical assistant."
+
     try:
         client = get_groq_client()
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "You are a helpful expert network support assistant."},
+                {"role": "system", "content": system_role},
                 {"role": "user", "content": summary_prompt}
             ],
             temperature=0.3,

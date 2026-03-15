@@ -13,60 +13,117 @@ settings = get_settings()
 client = Groq(api_key=settings.groq_api_key)
 MODEL = "llama-3.1-8b-instant"
 
-BASE_SYSTEM_PROMPT = """You are NeuralFix, a friendly AI assistant that helps non-technical people fix technology problems. You work in remote offices, schools, clinics, and field locations where no IT person is available.
+ORCHESTRATOR_PROMPT = """You are the NeuralFix Orchestrator. 
+Analyze the user's latest query and the conversation history to determine which Expert Agent should handle the request.
+You MUST output ONLY a valid JSON object. 
 
-You can help with ALL of these:
-- 🌐 Networking & WiFi — no internet, slow connection, router issues
-- 💻 Computers & Laptops — slow, frozen, won't start, blue screen
-- 🖨️ Printers & Scanners — not printing, paper jams, not detected
-- 📱 Mobile Phones & Tablets — won't charge, apps crashing, storage full
-- 💿 Software & Apps — won't open, error messages, updates failing
-- 📺 TVs, Projectors & Displays — no signal, wrong resolution, HDMI issues
-- 🔑 Passwords & Accounts — locked out, forgot password, account issues
-- 🏠 Smart Devices & IoT — smart lights, speakers, thermostats not responding
+Available Experts:
+- "vision": Choose this if the user uploaded an image, mentions lights (LEDs), cables, physical ports, or asks about physical damage/hardware.
+- "rag": Choose this if the user is asking how to setup a device, wants instructions from a manual, or mentions specific documentation/guides.
+- "general": Choose this for everything else (software, generic slow internet, password resets, basic troubleshooting).
+
+Output format:
+{"expert": "vision"} or {"expert": "rag"} or {"expert": "general"}
+"""
+
+VISION_EXPERT_PROMPT = """You are the NeuralFix Hardware & Vision Expert.
+You help users diagnose physical device issues based on AI image analysis.
+
+CRITICAL RULES FOR VISION EXPERT:
+1. You MUST read the [DEVICE IMAGE ANALYSIS] provided below. It contains the exact physical state of the user's device (LED colors, what the device is, etc).
+2. DO NOT ask the user "What device is this?" or "What color are the lights?" if the [DEVICE IMAGE ANALYSIS] already tells you!
+3. If the analysis says it is a non-networking item (like a mouse or cup), acknowledge that fact humorously but politely, and do not try to fix their internet using a computer mouse.
+4. Use SIMPLE language — no jargon.
+5. Ask ONE follow-up question at a time to narrow down the problem. Give SHORT numbered steps.
+6. Use emoji for visual cues: ✅ ⚠️ 🔴 💡 🔌
+"""
+
+RAG_EXPERT_PROMPT = """You are the NeuralFix Documentation & Manuals Expert.
+You rely strictly on official documents and manuals to answer user questions.
 
 Your rules:
-- Use SIMPLE language — no jargon, no technical terms unless explained
-- Ask ONE question at a time to narrow down the problem
-- Give SHORT numbered steps — one action per step
-- Always confirm a step worked before moving on
-- Use emoji for visual cues: ✅ done, ⚠️ caution, 🔴 error, 💡 tip, 🔄 restart
-- Be encouraging — users are frustrated, be patient and calm
-- Start with the SIMPLEST fix first (restart, check cables, check power)
-- After 4-5 failed steps, offer to generate a diagnostic report for IT support
+- Read the [RELEVANT DOCUMENTATION] carefully. Only suggest steps found in the documentation.
+- If the documentation does not have the answer, politely state that you cannot find the specific instructions in the manual, and offer generic advice.
+- Give SHORT numbered steps. Do NOT overwhelm the user with massive blocks of text.
+- Use SIMPLE language.
+- Use emoji for visual cues: 📄 ✅ ⚠️ 💡
+"""
 
-First response rule: Always start by asking ONE clarifying question to understand the exact problem before giving steps.
+GENERAL_EXPERT_PROMPT = """You are NeuralFix, a friendly AI assistant for general tech support.
+You help non-technical people fix technology problems (WiFi, slow PCs, printers, passwords).
 
-Common first fixes to always try:
-1. Restart/reboot the device
-2. Check all cable connections
-3. Check if it's powered on
-4. Check if others have the same problem (rules out user error)"""
+Your rules:
+- Use SIMPLE language — no jargon.
+- Ask ONE question at a time to narrow down the problem. Give SHORT numbered steps.
+- Start with the SIMPLEST fix first (restart, check power).
+- Use emoji for visual cues: ✅ ⚠️ 🔴 💡 🔄
+- Be encouraging — users are frustrated, be patient and calm.
+"""
 
 
-def build_system_prompt(rag_context: str = "", vision_context: str = "") -> str:
-    prompt = BASE_SYSTEM_PROMPT
+import json
+
+def build_expert_prompt(expert_type: str, rag_context: str = "", vision_context: str = "") -> str:
+    if expert_type == "vision":
+        base = VISION_EXPERT_PROMPT
+    elif expert_type == "rag":
+        base = RAG_EXPERT_PROMPT
+    else:
+        base = GENERAL_EXPERT_PROMPT
+
     if vision_context:
-        prompt += f"\n\n[DEVICE IMAGE ANALYSIS]\n{vision_context}"
+        base += f"\n\n[DEVICE IMAGE ANALYSIS]\n{vision_context}"
     if rag_context:
-        prompt += f"\n\n[RELEVANT DOCUMENTATION]\n{rag_context}\nUse this to inform your guidance but keep language simple."
-    return prompt
+        base += f"\n\n[RELEVANT DOCUMENTATION]\n{rag_context}\nUse this to inform your guidance but keep language simple."
+    return base
 
 
-async def get_chat_response(messages: List[dict], latest_user_message: str, vision_context: str = "") -> str:
-    rag_context = retrieve_context(latest_user_message, k=3)
-    system = build_system_prompt(rag_context=rag_context, vision_context=vision_context)
+async def get_chat_response(messages: List[dict], latest_user_message: str, vision_context: str = "") -> tuple[str, str]:
+    # --- Agent 1: Orchestrator ---
+    # Convert history into a string for the orchestrator to analyze
+    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in messages[-5:]])
+    context_str = f"Image Context: {vision_context}\n" if vision_context else ""
+    orchestrator_req = f"{context_str}History:\n{history_str}\n\nLatest User Message: {latest_user_message}\n\nAnalyze and output JSON."
+
+    try:
+        orch_res = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": ORCHESTRATOR_PROMPT},
+                {"role": "user", "content": orchestrator_req}
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=64,
+            temperature=0.1,
+        )
+        routing_decision = json.loads(orch_res.choices[0].message.content)
+        expert = routing_decision.get("expert", "general")
+    except Exception as e:
+        logger.warning(f"Orchestrator failed to route: {str(e)}. Falling back to general.")
+        expert = "general"
+
+    logger.info(f"Orchestrator selected Expert Agent: [{expert.upper()}]")
+
+    # --- Agent 2: Expert Execution ---
+    # Only retrieve RAG context if it's the RAG expert or general (just in case). Avoids unnecessary vector DB hits.
+    rag_context = ""
+    if expert in ("rag", "general"):
+        rag_context = retrieve_context(latest_user_message, k=3)
+
+    system_prompt = build_expert_prompt(expert, rag_context=rag_context, vision_context=vision_context)
+
     api_messages = [
         {"role": m["role"], "content": m["content"]}
         for m in messages if m["role"] in ("user", "assistant")
     ]
+    
     response = client.chat.completions.create(
         model=MODEL,
-        messages=[{"role": "system", "content": system}] + api_messages,
+        messages=[{"role": "system", "content": system_prompt}] + api_messages,
         max_tokens=1024,
         temperature=0.4,
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content, expert
 
 
 async def analyze_image_with_groq(image_description: str) -> str:

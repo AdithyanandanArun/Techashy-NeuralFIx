@@ -61,14 +61,18 @@ async def chat(body: ChatRequest, db: Session = Depends(get_db)):
     messages.append({"role": "user", "content": body.message, "timestamp": datetime.utcnow().isoformat()})
     if len(messages) == 1:
         s.title = body.message[:50] + ("..." if len(body.message) > 50 else "")
-    vision_context = str(s.device_info.get("latest_analysis", "")) if s.device_info else ""
+    vision_context = ""
+    if s.device_info and "images" in s.device_info and len(s.device_info["images"]) > 0:
+        # Get the analysis of the most recently uploaded image
+        latest_img = s.device_info["images"][-1]
+        vision_context = latest_img.get("analysis", "")
     try:
-        reply = await get_chat_response(messages=messages, latest_user_message=body.message, vision_context=vision_context)
+        reply, expert = await get_chat_response(messages=messages, latest_user_message=body.message, vision_context=vision_context)
     except Exception as e:
         raise HTTPException(500, f"AI error: {str(e)}")
-    messages.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+    messages.append({"role": "assistant", "content": reply, "expert_used": expert, "timestamp": datetime.utcnow().isoformat()})
     s.messages = messages; s.updated_at = datetime.utcnow(); db.commit()
-    return ChatResponse(session_id=body.session_id, reply=reply, rag_used=True)
+    return ChatResponse(session_id=body.session_id, reply=reply, expert_used=expert, rag_used=(expert == "rag"))
 
 
 # ── Images ────────────────────────────────────────────────────────────────────

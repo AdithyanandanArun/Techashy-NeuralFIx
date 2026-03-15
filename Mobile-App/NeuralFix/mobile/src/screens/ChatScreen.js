@@ -15,25 +15,25 @@ import StatusBadge from '../components/StatusBadge';
 import ServerBanner from '../components/ServerBanner';
 
 const CATEGORIES = [
-  { id: 'networking', label: 'WiFi / Internet',    icon: 'wifi',              color: '#00C2FF' },
-  { id: 'computer',   label: 'Computer / Laptop',  icon: 'laptop-outline',    color: '#818CF8' },
-  { id: 'printer',    label: 'Printer / Scanner',  icon: 'print-outline',     color: '#F59E0B' },
-  { id: 'mobile',     label: 'Phone / Tablet',     icon: 'phone-portrait-outline', color: '#22C55E' },
-  { id: 'software',   label: 'Software / Apps',    icon: 'apps-outline',      color: '#EC4899' },
-  { id: 'display',    label: 'TV / Projector',     icon: 'tv-outline',        color: '#F97316' },
-  { id: 'account',    label: 'Password / Account', icon: 'key-outline',       color: '#A78BFA' },
-  { id: 'iot',        label: 'Smart Devices',      icon: 'home-outline',      color: '#34D399' },
+  { id: 'networking', label: 'WiFi / Internet', icon: 'wifi', color: '#00C2FF' },
+  { id: 'computer', label: 'Computer / Laptop', icon: 'laptop-outline', color: '#818CF8' },
+  { id: 'printer', label: 'Printer / Scanner', icon: 'print-outline', color: '#F59E0B' },
+  { id: 'mobile', label: 'Phone / Tablet', icon: 'phone-portrait-outline', color: '#22C55E' },
+  { id: 'software', label: 'Software / Apps', icon: 'apps-outline', color: '#EC4899' },
+  { id: 'display', label: 'TV / Projector', icon: 'tv-outline', color: '#F97316' },
+  { id: 'account', label: 'Password / Account', icon: 'key-outline', color: '#A78BFA' },
+  { id: 'iot', label: 'Smart Devices', icon: 'home-outline', color: '#34D399' },
 ];
 
 const QUICK_PROMPTS = {
   networking: ['No internet connection', 'WiFi very slow', 'Router lights are red', "Can't connect to WiFi"],
-  computer:   ['Computer is frozen', 'Very slow startup', 'Blue screen error', 'Won\'t turn on'],
-  printer:    ['Printer not detected', 'Paper jam', 'Printing blank pages', 'Printer offline'],
-  mobile:     ['Phone won\'t charge', 'App keeps crashing', 'Storage full', 'Screen not responding'],
-  software:   ['App won\'t open', 'Error message on screen', 'Update keeps failing', 'Program crashed'],
-  display:    ['No signal on screen', 'HDMI not working', 'Wrong resolution', 'Projector won\'t connect'],
-  account:    ['Forgot my password', 'Account locked out', 'Can\'t log in', 'Two-factor not working'],
-  iot:        ['Smart light not responding', 'Alexa / Google not working', 'Device offline', 'Won\'t connect to app'],
+  computer: ['Computer is frozen', 'Very slow startup', 'Blue screen error', 'Won\'t turn on'],
+  printer: ['Printer not detected', 'Paper jam', 'Printing blank pages', 'Printer offline'],
+  mobile: ['Phone won\'t charge', 'App keeps crashing', 'Storage full', 'Screen not responding'],
+  software: ['App won\'t open', 'Error message on screen', 'Update keeps failing', 'Program crashed'],
+  display: ['No signal on screen', 'HDMI not working', 'Wrong resolution', 'Projector won\'t connect'],
+  account: ['Forgot my password', 'Account locked out', 'Can\'t log in', 'Two-factor not working'],
+  iot: ['Smart light not responding', 'Alexa / Google not working', 'Device offline', 'Won\'t connect to app'],
 };
 
 export default function ChatScreen({ navigation }) {
@@ -55,7 +55,7 @@ export default function ChatScreen({ navigation }) {
     if (isLoading) {
       Animated.loop(Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 0.2, duration: 500, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,   duration: 500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       ])).start();
     } else { pulseAnim.setValue(1); }
   }, [isLoading]);
@@ -217,18 +217,47 @@ export default function ChatScreen({ navigation }) {
 
       <ServerBanner status={serverOnline} onRetry={checkServer} />
 
-      {sessionMeta && messages.length > 0 && (
-        <View style={styles.sessionStrip}>
-          <StatusBadge status={sessionMeta.status} />
-          <Text style={styles.sessionTitle} numberOfLines={1}>{sessionMeta.title}</Text>
-          {sessionMeta.image_paths?.length > 0 && (
-            <View style={styles.imgCount}>
-              <Ionicons name="image-outline" size={12} color={COLORS.textMuted} />
-              <Text style={styles.imgCountText}>{sessionMeta.image_paths.length}</Text>
-            </View>
-          )}
-        </View>
-      )}
+      {sessionMeta && messages.length > 0 && (() => {
+        const lastMsg = [...messages].reverse().find(m => m.role === 'assistant' && m.expert_used);
+        const expert = lastMsg ? lastMsg.expert_used : sessionMeta.latest_expert || null;
+
+        let expertLabel = null;
+        let expertIcon = null;
+        let expertColor = null;
+
+        if (expert === 'vision') {
+          expertLabel = 'Vision Expert';
+          expertIcon = 'eye';
+          expertColor = COLORS.warning;
+        } else if (expert === 'rag') {
+          expertLabel = 'Docs Expert';
+          expertIcon = 'library';
+          expertColor = COLORS.success;
+        } else if (expert === 'general') {
+          expertLabel = 'General Expert';
+          expertIcon = 'hardware-chip-outline';
+          expertColor = COLORS.accent;
+        }
+
+        return (
+          <View style={styles.sessionStrip}>
+            <StatusBadge status={sessionMeta.status} />
+            <Text style={styles.sessionTitle} numberOfLines={1}>{sessionMeta.title}</Text>
+            {expertLabel && (
+              <View style={[styles.expertBadge, { borderColor: expertColor }]}>
+                <Ionicons name={expertIcon} size={10} color={expertColor} />
+                <Text style={[styles.expertBadgeText, { color: expertColor }]}>{expertLabel}</Text>
+              </View>
+            )}
+            {sessionMeta.image_paths?.length > 0 && (
+              <View style={styles.imgCount}>
+                <Ionicons name="image-outline" size={12} color={COLORS.textMuted} />
+                <Text style={styles.imgCountText}>{sessionMeta.image_paths.length}</Text>
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <FlatList
@@ -244,7 +273,7 @@ export default function ChatScreen({ navigation }) {
 
         {isLoading && (
           <View style={styles.typing}>
-            {[0,1,2].map(i => <Animated.View key={i} style={[styles.dot, { opacity: pulseAnim }]} />)}
+            {[0, 1, 2].map(i => <Animated.View key={i} style={[styles.dot, { opacity: pulseAnim }]} />)}
             <Text style={styles.typingText}>NeuralFix is thinking...</Text>
           </View>
         )}
@@ -296,9 +325,11 @@ const styles = StyleSheet.create({
   reportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: SPACING.sm, paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.accentMid, backgroundColor: COLORS.accentDim },
   reportBtnText: { fontSize: FONTS.sizes.xs, color: COLORS.accent, fontWeight: FONTS.weights.semibold },
   gridBtn: { width: 34, height: 34, borderRadius: RADIUS.sm, backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  newBtn:  { width: 34, height: 34, borderRadius: RADIUS.sm, backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  newBtn: { width: 34, height: 34, borderRadius: RADIUS.sm, backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   sessionStrip: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.base, paddingVertical: SPACING.xs, backgroundColor: COLORS.bg1, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   sessionTitle: { flex: 1, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  expertBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm, borderWidth: 1, backgroundColor: COLORS.bg2 },
+  expertBadgeText: { fontSize: 10, fontWeight: FONTS.weights.bold, textTransform: 'uppercase' },
   imgCount: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   imgCountText: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted },
   msgList: { paddingHorizontal: SPACING.base, paddingVertical: SPACING.base, gap: SPACING.md },
@@ -319,8 +350,8 @@ const styles = StyleSheet.create({
 
   // Quick prompts
   quickLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted, letterSpacing: 1, fontWeight: FONTS.weights.semibold, marginBottom: SPACING.sm, alignSelf: 'flex-start' },
-  quickList:  { width: '100%', gap: SPACING.sm },
-  quickChip:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, backgroundColor: COLORS.bg2, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
+  quickList: { width: '100%', gap: SPACING.sm },
+  quickChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, backgroundColor: COLORS.bg2, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   quickChipText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontWeight: FONTS.weights.medium },
 
   // Typing
@@ -331,13 +362,13 @@ const styles = StyleSheet.create({
   // Image preview
   imgPreview: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.base, marginBottom: SPACING.sm, padding: SPACING.sm, backgroundColor: COLORS.bg2, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   previewImg: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.bg3 },
-  removeImg:  { position: 'absolute', top: -6, left: 40 },
+  removeImg: { position: 'absolute', top: -6, left: 40 },
   imgPreviewLabel: { flex: 1, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
 
   // Input
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm, paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, paddingBottom: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.bg0 },
   mediaBtn: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: COLORS.borderLight, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: 10, fontSize: FONTS.sizes.base, color: COLORS.textPrimary },
-  sendBtn:    { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: COLORS.accent, alignItems: 'center', justifyContent: 'center' },
+  sendBtn: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: COLORS.accent, alignItems: 'center', justifyContent: 'center' },
   sendBtnOff: { backgroundColor: COLORS.bg3 },
 });
